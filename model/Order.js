@@ -32,8 +32,12 @@ const OrderSchema = new mongoose.Schema({
             quantity: Number,
         },
     ],
-    totalAmount: Number,
+    amount: Number,
     status: { type: String, default: "Pending" },
+    razorpayOrderId: { type: String },
+    razorpayPaymentId: { type: String },
+    razorpaySignature: { type: String },
+    paymentStatus: { type: String, default: "Pending" },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Order', OrderSchema);

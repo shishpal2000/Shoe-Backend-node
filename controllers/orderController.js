@@ -3,99 +3,107 @@ const Cart = require('../model/Cart');
 const Product = require('../model/Product');
 const Address = require('../model/Address');
 const User = require('../model/User');
+const mongoose = require('mongoose');
 
 exports.createOrder = async (req, res) => {
     try {
-        const { userId, shippingAddress, billingAddress, cartItems } = req.body;
+        const { userId, cartItems } = req.body;
 
+       
         const user = await User.findById(userId);
-        console.log(">>>>>>>item", req.body);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+        console.log(user);
+        const cart = await Cart.findOne({ user: userId }).populate('items.product').populate('items.variant');
+        if (!cart || !cart.items.length) return res.status(404).json({ success: false, message: 'Cart is empty or not found' });
+        console.log(cart);
+        const shippingAddress = await Address.findOne({ isDefaultShipping: true });
+        if (!shippingAddress) return res.status(404).json({ success: false, message: 'Shipping address not found' });
+        console.log('shipping', shippingAddress);
+        const billingAddress = await Address.findOne({ isDefaultBilling: true }) || shippingAddress;
+        console.log(billingAddress);
 
-        if (!user) {
-            return res.status(404).json({ success: false, message: 'User not found' });
-        }
-
-        const cart = await Cart.findOne({ user: userId });
-        if (!cart) {
-            return res.status(404).json({ success: false, message: 'Cart not found' });
-        }
-
-        // Fetch shipping address
-        const getShippingAddress = await Address.findById(shippingAddress._id);
-        if (!getShippingAddress) {
-            return res.status(404).json({ success: false, message: 'Shipping address not found' });
-        }
-
-        // Fetch billing address if provided
-        let getBillingAddress = billingAddress 
-            ? await Address.findById(billingAddress._id) 
-            : getShippingAddress;
-
-        if (billingAddress && !getBillingAddress) {
-            return res.status(404).json({ success: false, message: 'Billing address not found' });
-        }
-
-        let totalAmount = 0;
+        let amount = 0;
         const updatedItems = [];
 
-        // Validate and calculate total amount
         for (const item of cartItems) {
-            const product = await Product.findById(item.product).populate({
-                path: 'variants',
-                select: 'size color gender price'
-            });
+            const product = await Product.findById(item.product).populate('variants');
+            if (!product) return res.status(404).json({ success: false, message: `Product not found for ID ${item.product}` });
 
-            if (!product) {
-                return res.status(404).json({ success: false, message: `Product not found for ID ${item.product}` });
-            }
-
-            // Extract _id from the variant object or directly from the variant field
-            const variantId = item.variant._id || item.variant; // Ensure we get the ID
-
-            // Find the matching variant in the product's variants array
-            const variant = product.variants.find(v => v._id.equals(variantId));
-
-            if (!variant) {
-                return res.status(404).json({ success: false, message: `Variant not found for ID ${variantId}` });
-            }
+            const variant = product.variants.find(v => v._id.equals(item.variant));
+            if (!variant) return res.status(404).json({ success: false, message: `Variant not found for ID ${item.variant}` });
 
             const price = variant.price;
-            totalAmount += item.quantity * price;
+            amount += item.quantity * price;
 
-            // Push the updated item details to a new array
             updatedItems.push({
                 product: item.product,
-                variant: variant._id,  // Ensure we store the variant ID
+                variant: variant._id,
                 quantity: item.quantity,
                 price: price
             });
         }
-
-        // Create new order
+        console.log("Cart found: ", cart);
+        console.log("Cart items: ", cart.items);
+        // Create a new order
         const order = new Order({
             user: userId,
             items: updatedItems,
-            totalAmount,
-            shippingAddress: getShippingAddress,
-            billingAddress: getBillingAddress
+            amount,
+            shippingAddress: {
+                firstName: shippingAddress.firstName,
+                lastName: shippingAddress.lastName,
+                streetAddress: shippingAddress.streetAddress,
+                city: shippingAddress.city,
+                state: shippingAddress.state,
+                postalCode: shippingAddress.postalCode,
+                country: shippingAddress.country,
+                phone: shippingAddress.phone
+            },
+            billingAddress: {
+                firstName: billingAddress.firstName,
+                lastName: billingAddress.lastName,
+                streetAddress: billingAddress.streetAddress,
+                city: billingAddress.city,
+                state: billingAddress.state,
+                postalCode: billingAddress.postalCode,
+                country: billingAddress.country,
+                phone: billingAddress.phone
+            },
+            cartItems: updatedItems
         });
 
+        // Save the order
         await order.save();
 
-        // Optionally, clear the cart after creating the order
-        await Cart.findByIdAndRemove(cart._id);
+        // Optionally clear the user's cart after successful order creation
+        // await Cart.findByIdAndDelete(cart._id);
 
-        res.status(201).json({ success: true, data: order });
+        res.status(201).json({ success: true, orderId: order._id });
     } catch (err) {
-        console.log("error", err);
+        console.log("Error", err);
         res.status(500).json({ success: false, message: err.message });
     }
 };
 
-exports.getOrders = async (req, res) => {
+
+// Get a specific order by orderId
+exports.getOrderById = async (req, res) => {
     try {
-        const { userId } = req.params;
-        const orders = await Order.find({ user: userId });
+        const orderId = req.params.id;
+        console.log(`Fetching order with ID: ${orderId}`);
+        const order = await Order.findById(orderId);
+        console.log('Order found:', order);
+        if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+        res.status(200).json({ success: true, data: order });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// Get all orders (admin functionality)
+exports.getAllOrders = async (req, res) => {
+    try {
+        const orders = await Order.find();
         res.status(200).json({ success: true, data: orders });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });

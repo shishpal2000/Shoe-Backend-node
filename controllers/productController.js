@@ -183,7 +183,8 @@ exports.getProductVariants = async (req, res) => {
 exports.updateProduct = async (req, res) => {
     try {
         const { productId } = req.params;
-        const { product_name, product_slug, category, description, variants, isNewArrival } = req.body;
+        const { product_name, category, description, sku, variants, isNewArrival } = req.body;
+        console.log("update", req.body);
 
         const parsedVariants = JSON.parse(variants);
 
@@ -192,6 +193,9 @@ exports.updateProduct = async (req, res) => {
         if (!product) {
             return res.status(404).json({ success: false, message: 'Product not found' });
         }
+
+        // Generate the product slug
+        const product_slug = product_name.toLowerCase().replace(/ /g, '-');
 
         // Check if the product name already exists for another product
         if (product_name && product_name !== product.product_name) {
@@ -202,16 +206,20 @@ exports.updateProduct = async (req, res) => {
         }
 
         // Check if category exists and update if necessary
-        if (category && category !== product.category.toString()) {
+        if (category && (!product.category || category.toString() !== product.category.toString())) {
             const existingCategory = await Category.findById(category);
             if (!existingCategory) {
                 return res.status(400).json({ success: false, message: 'Category not found' });
             }
 
             // Remove product from old category and add to new category
-            const oldCategory = await Category.findById(product.category);
-            oldCategory.products.pull(product._id);
-            await oldCategory.save();
+            if (product.category) {
+                const oldCategory = await Category.findById(product.category);
+                if (oldCategory) {
+                    oldCategory.products.pull(product._id);
+                    await oldCategory.save();
+                }
+            }
 
             existingCategory.products.push(product._id);
             await existingCategory.save();
@@ -237,6 +245,7 @@ exports.updateProduct = async (req, res) => {
         if (product_name) product.product_name = product_name;
         if (product_slug) product.product_slug = product_slug;
         if (description) product.description = description;
+        if (sku) product.sku = sku;
         if (isNewArrival !== undefined) product.isNewArrival = isNewArrival;
 
         await product.save();
@@ -256,6 +265,7 @@ exports.updateProduct = async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 };
+
 
 
 // Delete a product by ID

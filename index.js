@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const Razorpay = require('razorpay');
 
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -10,8 +11,7 @@ const productRoutes = require('./routes/productRoutes');
 const cartRoutes = require('./routes/cartRoutes');
 const ordersRoutes = require('./routes/orderRoutes');
 const wishlistRoutes = require('./routes/wishlistRoutes');
-// const attributeRoutes = require('./routes/attributeRoutes');
-
+const paymentRoutes = require('./routes/paymentRoutes')
 
 require('dotenv').config();
 const app = express();
@@ -35,8 +35,12 @@ app.use('/api/product', productRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/wishlist', wishlistRoutes);
-// app.use('/api/attribute', attributeRoutes);
+app.use('/api/payment', paymentRoutes);
 
+const razorpay = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID, // Access from .env file
+    key_secret: process.env.RAZORPAY_KEY_SECRET // Access from .env file
+});
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });

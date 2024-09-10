@@ -60,9 +60,10 @@ exports.addToCart = async (req, res) => {
         res.status(200).json({ success: true, data: cart });
     } catch (err) {
         console.error('Error updating cart:', err.message);
-        res.status(500).json({ success: false, message: 'Internal server error' });
+        res.status(500).json({ success: false, message: `Internal server error: ${err.message}` });
     }
 };
+
 
 exports.updateCartItemQuantity = async (req, res) => {
     const { userId, productId, variantId, quantity } = req.body;
@@ -137,7 +138,6 @@ exports.getCart = async (req, res) => {
 exports.removeFromCart = async (req, res) => {
     try {
         const { userId, productId, variantId } = req.params;
-        console.log('Removing from cart:', { userId, productId, variantId });
         if (!userId) {
             return res.status(400).json({ success: false, message: 'User ID is required' });
         }
@@ -146,22 +146,21 @@ exports.removeFromCart = async (req, res) => {
         if (!cart) {
             return res.status(404).json({ success: false, message: 'Cart not found' });
         }
-        console.log("before cart", cart.items);
-        // Filter out the specific item based on both productId and variantId
         if (productId && variantId) {
             cart.items = cart.items.filter(item =>
-                !(item.product._id.toString() === productId && item.variant._id.toString() === variantId)
+                item.product && item.variant &&
+                item.product._id.toString() === productId &&
+                item.variant._id.toString() === variantId
             );
         } else if (productId) {
-            // Fallback to removing all variants of the product if no variantId is provided
-            cart.items = cart.items.filter(item => item.product._id.toString() !== productId);
+            cart.items = cart.items.filter(item =>
+                item.product && item.product._id.toString() !== productId
+            );
         }
 
-        // Save the cart only if there was a change
         if (cart.isModified('items')) {
             await cart.save();
         }
-        console.log("after cart", cart.items);
         let totalAmount = 0;
         cart.items.forEach(item => {
             const variantPrice = item.variant.price;

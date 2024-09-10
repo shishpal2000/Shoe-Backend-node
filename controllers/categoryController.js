@@ -10,7 +10,7 @@ exports.createCategory = async (req, res) => {
     try {
         console.log("Request received to create category");
 
-        const { name, status, parentCategory, badgeName, showOnFrontend } = req.body;
+        const { name, status, badgeName, showOnFrontend, parentCategory } = req.body;
 
         if (!name) {
             return res.status(400).json({ success: false, message: 'Category name is required' });
@@ -20,24 +20,17 @@ exports.createCategory = async (req, res) => {
         let imageUrl = null;
 
         if (req.file) {
-            console.log("Uploading file to Cloudinary...");
             const result = await uploadToCloudinary(req.file.buffer, 'category-images');
-            console.log("File uploaded successfully");
             imageUrl = result.secure_url;
         }
 
         let validatedParentCategory = null;
         if (parentCategory && parentCategory !== '') {
-            try {
-                console.log("Checking parent category...");
-                const parentCategoryExists = await Category.findById(parentCategory);
-                if (!parentCategoryExists) {
-                    return res.status(400).json({ success: false, message: 'Parent category not found' });
-                }
-                validatedParentCategory = parentCategory;
-            } catch (err) {
-                return res.status(400).json({ success: false, message: 'Invalid parent category ID' });
+            const parentCategoryExists = await Category.findById(parentCategory);
+            if (!parentCategoryExists) {
+                return res.status(400).json({ success: false, message: 'Parent category not found' });
             }
+            validatedParentCategory = parentCategory;
         }
 
         const categoryData = {
@@ -46,25 +39,28 @@ exports.createCategory = async (req, res) => {
             slug,
             badgeName,
             parentCategory: validatedParentCategory,
-            image: imageUrl
+            image: imageUrl,
         };
 
-        if (showOnFrontend === 'true' || showOnFrontend === 'false') {
+        if (typeof showOnFrontend !== 'undefined') {
             categoryData.showOnFrontend = showOnFrontend === 'true';
         }
 
-        console.log("Saving category...");
-        const category = new Category(categoryData);
+        const parentCategoryDoc = new Category(categoryData);
+        await parentCategoryDoc.save();
 
-        await category.save();
-        console.log("Category saved successfully");
+        res.status(201).json({
+            success: true,
+            data: parentCategoryDoc,
+            message: "Category created successfully"
+        });
 
-        res.status(201).json({ success: true, data: category });
     } catch (err) {
-        console.error("Error in creating category:", err.message);
+        console.error("Error creating category:", err.message);
         res.status(500).json({ success: false, message: err.message });
     }
 };
+
 
 
 exports.getAllCategories = async (req, res) => {
