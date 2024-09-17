@@ -13,9 +13,8 @@ const AddressSchema = new mongoose.Schema({
     phone: { type: String, required: true },
     postalCode: { type: String, required: true },
     deliveryInstruction: { type: String },
-    isDefaultShipping: { type: Boolean, default: false },
-    isDefaultBilling: { type: Boolean, default: false },
     type: { type: String, enum: ['Shipping', 'Billing'], required: true },
+    isDefault: { type: Boolean, default: false },
     status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
 }, { timestamps: true });
 

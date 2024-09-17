@@ -95,36 +95,54 @@ exports.createProduct = async (req, res) => {
 
 exports.getAllProducts = async (req, res) => {
     try {
-        const { isNewArrival, ...filters } = req.query;
-        let query = {};
+        const { product_slug, productId, isNewArrival, ...filters } = req.query;
 
+        // Handle fetching a specific product by slug
+        if (product_slug) {
+            const product = await Product.findOne({ product_slug }).populate('variants').exec();
+            if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+
+            const uniqueSizes = [...new Set(product.variants.map(variant => variant.size))];
+            product.uniqueSizes = uniqueSizes;
+
+            return res.status(200).json({ success: true, data: product });
+        }
+
+        // Handle fetching variants of a specific product
+        if (productId) {
+            const product = await Product.findById(productId).populate('variants').exec();
+            if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+
+            return res.status(200).json({ success: true, data: product.variants });
+        }
+
+        // Build the query object for fetching products with filters
+        let query = {};
         if (isNewArrival !== undefined) {
             query.isNewArrival = isNewArrival === 'true';
         }
 
-        // Apply other filters
         Object.keys(filters).forEach(filterKey => {
-            query[filterKey] = filters[filterKey];
+            if (filterKey === 'size' || filterKey === 'color' || filterKey === 'price') {
+                query[`variants.${filterKey}`] = { $in: filters[filterKey].split(',') };
+            } else if (filterKey === 'category') {
+                query['categories'] = { $in: filters[filterKey].split(',') };
+            } else if (filterKey === 'subcategory') {
+                query['subcategories'] = { $in: filters[filterKey].split(',') };
+            } else {
+                query[filterKey] = filters[filterKey];
+            }
         });
 
+        // Fetch products with optional population
         let productQuery = Product.find(query).populate('variants');
-
-        // Optionally populate categories if needed
         if (Product.schema.path('category')) {
             productQuery = productQuery.populate('category');
         }
 
         const products = await productQuery.exec();
-        res.status(200).json({ success: true, data: products });
-    } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
-    }
-};
 
-exports.getAllProductsWithFilters = async (req, res) => {
-    try {
-        const products = await Product.find().populate('variants').exec();
-
+        // Fetch filter options
         const categories = await Category.find().exec();
         const variants = await Variant.find().exec();
 
@@ -148,35 +166,8 @@ exports.getAllProductsWithFilters = async (req, res) => {
                 }
             }
         });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
-
-// Get a product by ID
-exports.getProductById = async (req, res) => {
-    try {
-        const product = await Product.findById(req.params.id).populate('category').populate('variants').exec();
-        if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-        res.status(200).json({ success: true, data: product });
     } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
-    }
-};
-
-exports.getProductVariants = async (req, res) => {
-    try {
-        const { productId } = req.params;
-
-        const product = await Product.findById(productId).populate('variants');
-        if (!product) {
-            return res.status(404).json({ success: false, message: 'Product not found' });
-        }
-
-        res.status(200).json({ success: true, data: product.variants });
-    } catch (err) {
-        console.error('Error fetching product variants:', err.message);
-        res.status(500).json({ success: false, message: 'Internal server error' });
+        res.status(500).json({ success: false, message: err.message });
     }
 };
 // Update a product by ID
@@ -251,7 +242,7 @@ exports.updateProduct = async (req, res) => {
         await product.save();
 
         // Update variants
-        await Variant.deleteMany({ product: product._id }); // Remove old variants
+        await Variant.deleteMany({ product: product._id });
         for (let variantData of parsedVariants) {
             const variant = new Variant({
                 ...variantData,
@@ -266,7 +257,21 @@ exports.updateProduct = async (req, res) => {
     }
 };
 
+exports.getProductVariants = async (req, res) => {
+    try {
+        const { productId } = req.params;
 
+        const product = await Product.findById(productId).populate('variants');
+        if (!product) {
+            return res.status(404).json({ success: false, message: 'Product not found' });
+        }
+
+        res.status(200).json({ success: true, data: product.variants });
+    } catch (err) {
+        console.error('Error fetching product variants:', err.message);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
 
 // Delete a product by ID
 exports.deleteProduct = async (req, res) => {

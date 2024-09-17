@@ -3,96 +3,105 @@ const Cart = require('../model/Cart');
 const Product = require('../model/Product');
 const Address = require('../model/Address');
 const User = require('../model/User');
-const mongoose = require('mongoose');
 
 exports.createOrder = async (req, res) => {
     try {
-        const { userId, cartItems } = req.body;
+        const { userId, cartItems, shippingAddress, billingAddress } = req.body;
 
-       
         const user = await User.findById(userId);
-        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-        console.log(user);
-        const cart = await Cart.findOne({ user: userId }).populate('items.product').populate('items.variant');
-        if (!cart || !cart.items.length) return res.status(404).json({ success: false, message: 'Cart is empty or not found' });
-        console.log(cart);
-        const shippingAddress = await Address.findOne({ isDefaultShipping: true });
-        if (!shippingAddress) return res.status(404).json({ success: false, message: 'Shipping address not found' });
-        console.log('shipping', shippingAddress);
-        const billingAddress = await Address.findOne({ isDefaultBilling: true }) || shippingAddress;
-        console.log(billingAddress);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
 
-        let amount = 0;
+        if (!cartItems || cartItems.length === 0) {
+            return res.status(400).json({ success: false, message: 'No cart items provided' });
+        }
+
+        const handleAddress = async (address, type) => {
+            if (address._id) {
+                return await Address.findByIdAndUpdate(address._id, { ...address, type }, { new: true });
+            } else {
+                return await new Address({ ...address, userId, type }).save();
+            }
+        };
+
+        const shippingAddr = await handleAddress(shippingAddress, 'Shipping');
+        const billingAddr = await handleAddress(billingAddress, 'Billing');
+
+        let totalAmount = 0;
         const updatedItems = [];
 
         for (const item of cartItems) {
-            const product = await Product.findById(item.product).populate('variants');
-            if (!product) return res.status(404).json({ success: false, message: `Product not found for ID ${item.product}` });
+            if (!item || !item.product) {
+                console.error('Invalid cart item:', item);
+                return res.status(400).json({ success: false, message: 'Invalid cart item' });
+            }
 
-            const variant = product.variants.find(v => v._id.equals(item.variant));
-            if (!variant) return res.status(404).json({ success: false, message: `Variant not found for ID ${item.variant}` });
+            const product = await Product.findById(item.product);
+            if (!product) {
+                console.error('Product not found for ID:', item.product);
+                return res.status(404).json({ success: false, message: `Product not found for ID ${item.product}` });
+            }
+
+            if (!Array.isArray(product.variants)) {
+                console.error('Product variants is not an array:', product.variants);
+                return res.status(400).json({ success: false, message: 'Invalid product variants' });
+            }
+
+            if (!item.variant) {
+                console.error('Variant ID not provided for cart item:', item);
+                return res.status(400).json({ success: false, message: 'Variant ID not provided' });
+            }
+
+            const variant = product.variants.find(v => v._id.toString() === item.variant.toString());
+            console.log('Variant Data:', variant); // Log variant data
+
+            if (!variant || !variant.price || !variant.size) {
+                console.error('Variant is missing required fields:', variant);
+                return res.status(400).json({ success: false, message: `Variant is missing required fields (price: ${variant ? variant.price : 'undefined'}, size: ${variant ? variant.size : 'undefined'})` });
+            }
 
             const price = variant.price;
-            amount += item.quantity * price;
+            totalAmount += item.quantity * price;
 
             updatedItems.push({
                 product: item.product,
-                variant: variant._id,
-                quantity: item.quantity,
-                price: price
+                variantId: item.variant, // Corrected field name
+                quantity: item.quantity
             });
         }
-        console.log("Cart found: ", cart);
-        console.log("Cart items: ", cart.items);
-        // Create a new order
+
         const order = new Order({
-            user: userId,
-            items: updatedItems,
-            amount,
-            shippingAddress: {
-                firstName: shippingAddress.firstName,
-                lastName: shippingAddress.lastName,
-                streetAddress: shippingAddress.streetAddress,
-                city: shippingAddress.city,
-                state: shippingAddress.state,
-                postalCode: shippingAddress.postalCode,
-                country: shippingAddress.country,
-                phone: shippingAddress.phone
-            },
-            billingAddress: {
-                firstName: billingAddress.firstName,
-                lastName: billingAddress.lastName,
-                streetAddress: billingAddress.streetAddress,
-                city: billingAddress.city,
-                state: billingAddress.state,
-                postalCode: billingAddress.postalCode,
-                country: billingAddress.country,
-                phone: billingAddress.phone
-            },
-            cartItems: updatedItems
+            userId,
+            cartItems: updatedItems,
+            totalAmount,
+            shippingAddress: shippingAddr,
+            billingAddress: billingAddr,
+            status: 'pending'
         });
 
-        // Save the order
         await order.save();
-
-        // Optionally clear the user's cart after successful order creation
-        // await Cart.findByIdAndDelete(cart._id);
 
         res.status(201).json({ success: true, orderId: order._id });
     } catch (err) {
-        console.log("Error", err);
+        console.error("Error creating order:", err);
         res.status(500).json({ success: false, message: err.message });
     }
 };
-
 
 // Get a specific order by orderId
 exports.getOrderById = async (req, res) => {
     try {
         const orderId = req.params.id;
         console.log(`Fetching order with ID: ${orderId}`);
-        const order = await Order.findById(orderId);
-        console.log('Order found:', order);
+        const order = await Order.findById(orderId)
+            .populate('shippingAddress')
+            .populate('billingAddress')
+            .populate('cartItems.product');
+
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
         if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
         res.status(200).json({ success: true, data: order });
     } catch (err) {

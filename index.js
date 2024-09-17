@@ -12,6 +12,7 @@ const cartRoutes = require('./routes/cartRoutes');
 const ordersRoutes = require('./routes/orderRoutes');
 const wishlistRoutes = require('./routes/wishlistRoutes');
 const paymentRoutes = require('./routes/paymentRoutes')
+const couponRoutes = require('./routes/couponRoutes');
 
 require('dotenv').config();
 const app = express();
@@ -36,6 +37,7 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/coupons', couponRoutes);
 
 const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID, // Access from .env file

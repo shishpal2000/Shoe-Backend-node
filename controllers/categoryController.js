@@ -4,33 +4,32 @@ require('dotenv').config;
 const Product = require('../model/Product');
 // const Variant = require('../model/Variant');
 
-
 // Create a new category
 exports.createCategory = async (req, res) => {
     try {
         console.log("Request received to create category");
-
         const { name, status, badgeName, showOnFrontend, parentCategory } = req.body;
-
         if (!name) {
             return res.status(400).json({ success: false, message: 'Category name is required' });
         }
-
         const slug = name.toLowerCase().replace(/ /g, '-');
         let imageUrl = null;
-
         if (req.file) {
             const result = await uploadToCloudinary(req.file.buffer, 'category-images');
             imageUrl = result.secure_url;
         }
 
+        // Validate parentCategory
         let validatedParentCategory = null;
-        if (parentCategory && parentCategory !== '') {
-            const parentCategoryExists = await Category.findById(parentCategory);
-            if (!parentCategoryExists) {
-                return res.status(400).json({ success: false, message: 'Parent category not found' });
+        if (parentCategory) {
+            if (mongoose.isValidObjectId(parentCategory)) {
+                validatedParentCategory = await Category.findById(parentCategory);
+                if (!validatedParentCategory) {
+                    return res.status(400).json({ success: false, message: 'Parent category not found' });
+                }
+            } else {
+                return res.status(400).json({ success: false, message: 'Invalid parent category ID' });
             }
-            validatedParentCategory = parentCategory;
         }
 
         const categoryData = {
@@ -38,29 +37,24 @@ exports.createCategory = async (req, res) => {
             status,
             slug,
             badgeName,
-            parentCategory: validatedParentCategory,
+            parentCategory: validatedParentCategory ? validatedParentCategory._id : null,
             image: imageUrl,
         };
-
         if (typeof showOnFrontend !== 'undefined') {
             categoryData.showOnFrontend = showOnFrontend === 'true';
         }
-
         const parentCategoryDoc = new Category(categoryData);
         await parentCategoryDoc.save();
-
         res.status(201).json({
             success: true,
             data: parentCategoryDoc,
             message: "Category created successfully"
         });
-
     } catch (err) {
         console.error("Error creating category:", err.message);
         res.status(500).json({ success: false, message: err.message });
     }
 };
-
 
 
 exports.getAllCategories = async (req, res) => {

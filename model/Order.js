@@ -1,38 +1,18 @@
 const mongoose = require('mongoose');
 
 const OrderSchema = new mongoose.Schema({
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    shippingAddress: {
-        firstName: String,
-        lastName: String,
-        streetAddress: String,
-        city: String,
-        state: String,
-        postalCode: String,
-        country: String,
-        phone: String,
-    },
-    billingAddress: {
-        firstName: String,
-        lastName: String,
-        streetAddress: String,
-        city: String,
-        state: String,
-        postalCode: String,
-        country: String,
-        phone: String,
-    },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    shippingAddress: { type: mongoose.Schema.Types.ObjectId, ref: "Address", required: true },
+    billingAddress: { type: mongoose.Schema.Types.ObjectId, ref: "Address", required: true },
     cartItems: [
         {
-            product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
-            variant: {
-                size: String,
-                price: Number,
-            },
-            quantity: Number,
+            product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+            variantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product.variants', required: true },
+
+            quantity: { type: Number, required: true },
         },
     ],
-    amount: Number,
+    totalAmount: { type: Number, required: true },
     status: { type: String, default: "Pending" },
     razorpayOrderId: { type: String },
     razorpayPaymentId: { type: String },

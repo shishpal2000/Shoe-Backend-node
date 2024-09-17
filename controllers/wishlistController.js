@@ -45,20 +45,31 @@ exports.getWishlist = async (req, res) => {
 exports.removeFromWishlist = async (req, res) => {
     try {
         if (!req.user || !req.user._id) {
+            console.log("No authenticated user found");
             return res.status(401).json({ success: false, message: 'User not authenticated' });
         }
         const userId = req.user._id;
+        console.log("User ID: ", userId);
+
         const { productId } = req.params;
+        console.log("Product ID: ", productId);
+
         const wishlist = await Wishlist.findOne({ user: userId });
         if (!wishlist) {
             return res.status(404).json({ success: false, message: 'Wishlist not found' });
         }
 
-        wishlist.items = wishlist.items.filter(item => item.toString() !== productId);
+        wishlist.items = wishlist.items.filter(item => item.toString() !== productId.toString());
+
         await wishlist.save();
 
-        res.status(200).json({ success: true, data: wishlist });
+        const updatedWishlist = await Wishlist.findOne({ user: userId }).populate('items');
+
+        res.status(200).json({ success: true, data: updatedWishlist });
     } catch (err) {
+        console.log("Error: ", err);
         res.status(500).json({ success: false, message: err.message });
     }
 };
+
+

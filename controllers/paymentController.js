@@ -2,6 +2,8 @@ const Payment = require('../model/Payment');
 const Order = require('../model/Order');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const Cart = require('../model/Cart');
+
 
 const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
@@ -11,8 +13,6 @@ const razorpay = new Razorpay({
 exports.createPaymentOrder = async (req, res) => {
     try {
         const { orderId, userId, amount, notes } = req.body;
-        console.log('req bodyyyyyyy ', orderId, userId, amount, notes);
-        console.log(req.body);
         if (!userId) {
             return res.status(400).json({ success: false, message: 'User ID is required' });
         }
@@ -57,7 +57,6 @@ exports.createPaymentOrder = async (req, res) => {
 exports.verifyPayment = async (req, res) => {
     try {
         const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
-        console.log(">>>>>>>>>>", req.body);
         const generatedSignature = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
             .update(`${razorpayOrderId}|${razorpayPaymentId}`)
             .digest('hex');
@@ -65,22 +64,18 @@ exports.verifyPayment = async (req, res) => {
         if (generatedSignature !== razorpaySignature) {
             return res.status(400).json({ success: false, message: 'Invalid payment signature' });
         }
-        console.log("Generated Signature:", generatedSignature);
-        console.log("Received Signature:", razorpaySignature);
 
-        // Find and update the Payment record
         const payment = await Payment.findOne({ razorpayOrderId });
         if (!payment) return res.status(404).json({ success: false, message: 'Payment record not found' });
 
-        // Update payment details
         payment.razorpayPaymentId = razorpayPaymentId;
         payment.razorpaySignature = razorpaySignature;
         payment.paymentStatus = 'Paid';
         await payment.save();
 
-        // Find and update the associated Order
         const order = await Order.findById(payment.orderId);
         if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
 
         order.razorpayPaymentId = razorpayPaymentId;
         order.razorpaySignature = razorpaySignature;
@@ -88,15 +83,31 @@ exports.verifyPayment = async (req, res) => {
         order.status = 'Paid';
         await order.save();
 
+        const cart = await Cart.findOne({ user: order.userId });
+        if (cart) {
+            cart.items = [];
+            cart.isActive = false;
+            await cart.save();
+
+            console.log('Cart cleared for user:', order.userId);
+        } else {
+            console.error('Cart not found for user:', order.userId);
+        }
+
         res.status(200).json({ success: true, message: 'Payment verified and order updated' });
     } catch (error) {
         console.error("Error verifying payment:", error);
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
 exports.paymentFailure = async (req, res) => {
     try {
         const { razorpayOrderId } = req.body;
+
+        if (!razorpayOrderId) {
+            return res.status(400).json({ success: false, message: 'Razorpay Order ID is required' });
+        }
 
         const payment = await Payment.findOne({ razorpayOrderId });
         if (!payment) return res.status(404).json({ success: false, message: 'Payment record not found' });
@@ -104,12 +115,21 @@ exports.paymentFailure = async (req, res) => {
         payment.paymentStatus = 'Failed';
         await payment.save();
 
+        const order = await Order.findById(payment.orderId);
+        if (order) {
+            order.paymentStatus = 'Failed';
+            await order.save();
+        }
+
+        await Cart.findOneAndUpdate({ user: payment.userId }, { isActive: true });
+
         res.status(200).json({ success: true, message: 'Payment marked as failed' });
     } catch (error) {
         console.error("Error handling payment failure:", error);
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
 
 exports.getPaymentDetails = async (req, res) => {
     try {
@@ -123,4 +143,4 @@ exports.getPaymentDetails = async (req, res) => {
         console.error("Error fetching payment details:", error);
         res.status(500).json({ success: false, message: error.message });
     }
-};
+}; 
