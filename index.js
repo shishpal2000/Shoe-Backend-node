@@ -13,6 +13,7 @@ const ordersRoutes = require('./routes/orderRoutes');
 const wishlistRoutes = require('./routes/wishlistRoutes');
 const paymentRoutes = require('./routes/paymentRoutes')
 const couponRoutes = require('./routes/couponRoutes');
+const ratingRoutes = require('./routes/ratingRoutes')
 
 require('dotenv').config();
 const app = express();
@@ -38,10 +39,11 @@ app.use('/api/orders', ordersRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/coupons', couponRoutes);
+app.use('/api/rating', ratingRoutes);
 
 const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID, // Access from .env file
-    key_secret: process.env.RAZORPAY_KEY_SECRET // Access from .env file
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);

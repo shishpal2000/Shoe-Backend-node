@@ -8,6 +8,8 @@ const UserSchema = new mongoose.Schema({
     otp: { type: String },
     otpExpires: { type: Date },
     isVerified: { type: Boolean, default: false },
+    resetToken: { type: String },
+    resetTokenExpires: { type: Date },
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', UserSchema);

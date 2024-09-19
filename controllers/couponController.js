@@ -5,15 +5,12 @@ const Variant = require('../model/Variant');
 // Create a new coupon
 exports.createCoupon = async (req, res) => {
     try {
-        const { code, discountValue, discountType, expirationDate, usageLimit, applicableProducts, applicableCategories } = req.body;
+        const { code, discountValue, discountType, expirationDate, usageLimit, applicableCategories } = req.body;
 
         if (!code) {
             return res.status(400).json({ success: false, message: 'Coupon code is required' });
         }
 
-        const products = Array.isArray(applicableProducts)
-            ? applicableProducts
-            : JSON.parse(applicableProducts);
         const categories = Array.isArray(applicableCategories)
             ? applicableCategories
             : JSON.parse(applicableCategories);
@@ -32,7 +29,6 @@ exports.createCoupon = async (req, res) => {
             discountType,
             expirationDate: expirationDate ? new Date(expirationDate) : null,
             usageLimit,
-            applicableProducts: products,
             applicableCategories: categories,
             usedCount: 0
         });

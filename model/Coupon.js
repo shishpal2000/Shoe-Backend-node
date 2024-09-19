@@ -6,7 +6,6 @@ const couponSchema = new mongoose.Schema({
     discountType: { type: String, required: true, enum: ['percentage', 'fixed'] },
     expirationDate: { type: Date },
     usageLimit: { type: Number },
-    applicableProducts: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
     applicableCategories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
     usedCount: { type: Number, default: 0 }
 });

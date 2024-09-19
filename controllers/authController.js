@@ -128,6 +128,74 @@ exports.authUser = async (req, res) => {
     }
 };
 
+exports.forgotPassword = async (req, res) => {
+    const { email } = req.body;
+
+    try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(400).json({ message: 'No user found with that email address' });
+        }
+
+        // Generate a reset token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+
+        // Set token and expiration
+        user.resetToken = resetToken;
+        user.resetTokenExpires = Date.now() + 3600000; // 1 hour
+        await user.save();
+
+        // Send the reset token to the user via email
+        const transporter = nodemailer.createTransport({
+            service: 'Gmail',
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS,
+            },
+        });
+
+        const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: email,
+            subject: 'Password Reset Request',
+            text: `You requested a password reset. Please click the link below to reset your password:\n\n${resetURL}\n\nThis link will expire in 1 hour.`,
+        };
+
+        await transporter.sendMail(mailOptions);
+
+        res.status(200).json({ message: 'Password reset link sent to your email' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+exports.resetPassword = async (req, res) => {
+    const { token, newPassword } = req.body;
+
+    try {
+        const user = await User.findOne({
+            resetToken: token,
+            resetTokenExpires: { $gt: Date.now() },
+        });
+
+        if (!user) {
+            return res.status(400).json({ message: 'Invalid or expired token' });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+        user.password = hashedPassword;
+        user.resetToken = undefined;
+        user.resetTokenExpires = undefined;
+        await user.save();
+
+        res.status(200).json({ message: 'Password has been reset successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
 exports.logout = async (req, res) => {
     try {
         const token = req.headers.authorization?.split(' ')[1];

@@ -56,7 +56,6 @@ exports.createCategory = async (req, res) => {
     }
 };
 
-
 exports.getAllCategories = async (req, res) => {
     try {
         const { showOnFrontend } = req.query;

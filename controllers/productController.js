@@ -6,7 +6,7 @@ const { uploadToCloudinary } = require("../middleware/cloudinaryConfig.js");
 
 exports.createProduct = async (req, res) => {
     try {
-        const { product_name, description, sku, categories, variants, isNewArrival } = req.body;
+        const { product_name, description, sku, video_url, categories, variants, isNewArrival } = req.body;
 
         const product_slug = product_name.toLowerCase().replace(/ /g, '-');
 
@@ -62,7 +62,8 @@ exports.createProduct = async (req, res) => {
             description,
             sku,
             images: attachment,
-            isNewArrival
+            isNewArrival,
+            video_url
         });
 
         await product.save();
@@ -95,11 +96,30 @@ exports.createProduct = async (req, res) => {
 
 exports.getAllProducts = async (req, res) => {
     try {
-        const { product_slug, productId, isNewArrival, ...filters } = req.query;
+        const { product_slug, productId, isNewArrival, category, ...filters } = req.query;
 
-        // Handle fetching a specific product by slug
+        let categoryObjectId = null;
+        if (category) {
+            const categoryDoc = await Category.findOne({ name: new RegExp(`^${category}$`, 'i') }).exec(); // Case-insensitive search
+            if (categoryDoc) {
+                categoryObjectId = categoryDoc._id;
+            } else {
+                return res.status(400).json({ success: false, message: 'Invalid category name' });
+            }
+        }
+
         if (product_slug) {
-            const product = await Product.findOne({ product_slug }).populate('variants').exec();
+            const product = await Product.findOne({ product_slug })
+                .populate({
+                    path: 'reviews',
+                    match: { approved: true },
+                    populate: {
+                        path: 'user',
+                        select: 'firstName'
+                    }
+                })
+                .populate('variants')
+                .exec();
             if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
             const uniqueSizes = [...new Set(product.variants.map(variant => variant.size))];
@@ -108,25 +128,35 @@ exports.getAllProducts = async (req, res) => {
             return res.status(200).json({ success: true, data: product });
         }
 
-        // Handle fetching variants of a specific product
         if (productId) {
-            const product = await Product.findById(productId).populate('variants').exec();
+            const product = await Product.findById(productId)
+                .populate({
+                    path: 'reviews',
+                    match: { approved: true },
+                    populate: {
+                        path: 'user',
+                        select: 'firstName'  // Adjust fields as needed
+                    }
+                })
+                .populate('variants')  // Populate variants without reviews
+                .exec();
             if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
-            return res.status(200).json({ success: true, data: product.variants });
+            return res.status(200).json({ success: true, data: product });
         }
 
-        // Build the query object for fetching products with filters
         let query = {};
         if (isNewArrival !== undefined) {
             query.isNewArrival = isNewArrival === 'true';
         }
 
+        if (categoryObjectId) {
+            query['categories'] = categoryObjectId;
+        }
+
         Object.keys(filters).forEach(filterKey => {
             if (filterKey === 'size' || filterKey === 'color' || filterKey === 'price') {
                 query[`variants.${filterKey}`] = { $in: filters[filterKey].split(',') };
-            } else if (filterKey === 'category') {
-                query['categories'] = { $in: filters[filterKey].split(',') };
             } else if (filterKey === 'subcategory') {
                 query['subcategories'] = { $in: filters[filterKey].split(',') };
             } else {
@@ -134,15 +164,23 @@ exports.getAllProducts = async (req, res) => {
             }
         });
 
-        // Fetch products with optional population
-        let productQuery = Product.find(query).populate('variants');
+        let productQuery = Product.find(query)
+            .populate({
+                path: 'reviews',
+                match: { approved: true },
+                populate: {
+                    path: 'user',
+                    select: 'firstName'
+                }
+            })
+            .populate('variants'); 
+
         if (Product.schema.path('category')) {
             productQuery = productQuery.populate('category');
         }
 
         const products = await productQuery.exec();
 
-        // Fetch filter options
         const categories = await Category.find().exec();
         const variants = await Variant.find().exec();
 
@@ -170,6 +208,8 @@ exports.getAllProducts = async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 };
+
+
 // Update a product by ID
 exports.updateProduct = async (req, res) => {
     try {
