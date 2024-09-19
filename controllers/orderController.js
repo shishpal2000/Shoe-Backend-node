@@ -1,12 +1,17 @@
 const Order = require('../model/Order');
-const Cart = require('../model/Cart');
 const Product = require('../model/Product');
 const Address = require('../model/Address');
 const User = require('../model/User');
+const Variant = require('../model/Variant');
+
+const generateOrderNumber = () => {
+    const randomDigits = Math.floor(100000000 + Math.random() * 900000000);
+    return `ORD_${randomDigits}`;
+};
 
 exports.createOrder = async (req, res) => {
     try {
-        const { userId, cartItems, shippingAddress, billingAddress } = req.body;
+        const { userId, cartItems, shippingAddress, billingAddress, couponCode } = req.body;
 
         const user = await User.findById(userId);
         if (!user) {
@@ -54,11 +59,9 @@ exports.createOrder = async (req, res) => {
             }
 
             const variant = product.variants.find(v => v._id.toString() === item.variant.toString());
-            console.log('Variant Data:', variant); // Log variant data
-
             if (!variant || !variant.price || !variant.size) {
                 console.error('Variant is missing required fields:', variant);
-                return res.status(400).json({ success: false, message: `Variant is missing required fields (price: ${variant ? variant.price : 'undefined'}, size: ${variant ? variant.size : 'undefined'})` });
+                return res.status(400).json({ success: false, message: `Variant is missing required fields` });
             }
 
             const price = variant.price;
@@ -66,43 +69,64 @@ exports.createOrder = async (req, res) => {
 
             updatedItems.push({
                 product: item.product,
-                variantId: item.variant, // Corrected field name
+                variantId: item.variant,
                 quantity: item.quantity
             });
         }
+
+        let discount = 0;
+        if (couponCode) {
+        }
+
+        const finalTotal = totalAmount - discount;
+        const orderNumber = generateOrderNumber();
 
         const order = new Order({
             userId,
             cartItems: updatedItems,
             totalAmount,
+            discount,
+            finalTotal,
+            couponCode,
             shippingAddress: shippingAddr,
             billingAddress: billingAddr,
-            status: 'pending'
+            orderNumber,
+            status: 'Pending'
         });
 
         await order.save();
 
-        res.status(201).json({ success: true, orderId: order._id });
+        res.status(201).json({ success: true, orderId: order._id, orderNumber });
     } catch (err) {
         console.error("Error creating order:", err);
         res.status(500).json({ success: false, message: err.message });
     }
 };
 
+
 // Get a specific order by orderId
 exports.getOrderById = async (req, res) => {
     try {
         const orderId = req.params.id;
-        console.log(`Fetching order with ID: ${orderId}`);
         const order = await Order.findById(orderId)
             .populate('shippingAddress')
             .populate('billingAddress')
-            .populate('cartItems.product');
+            .populate({
+                path: 'cartItems.product',
+                select: 'product_name product_slug images description ratingsAverage ratingsQuantity',
+                strictPopulate: false
+            })
+            .populate({
+                path: 'cartItems.variantId',
+                select: 'size color price quantity',
+                strictPopulate: false
+            });
+        console.log(order.cartItems);
 
         if (!order) {
             return res.status(404).json({ success: false, message: 'Order not found' });
         }
-        if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
         res.status(200).json({ success: true, data: order });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });

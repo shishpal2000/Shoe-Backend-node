@@ -5,7 +5,7 @@ const Variant = require('../model/Variant');
 // Create a new coupon
 exports.createCoupon = async (req, res) => {
     try {
-        const { code, discountValue, discountType, expirationDate, usageLimit, applicableCategories } = req.body;
+        const { code, discountValue,coupon_desc, discountType, expirationDate, usageLimit, applicableCategories } = req.body;
 
         if (!code) {
             return res.status(400).json({ success: false, message: 'Coupon code is required' });
@@ -27,6 +27,7 @@ exports.createCoupon = async (req, res) => {
             code,
             discountValue,
             discountType,
+            coupon_desc,
             expirationDate: expirationDate ? new Date(expirationDate) : null,
             usageLimit,
             applicableCategories: categories,
