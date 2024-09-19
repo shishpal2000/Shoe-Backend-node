@@ -2,12 +2,11 @@ const Category = require('../model/Category');
 const { uploadToCloudinary } = require("../middleware/cloudinaryConfig.js");
 require('dotenv').config;
 const Product = require('../model/Product');
-// const Variant = require('../model/Variant');
+const mongoose = require('mongoose'); 
 
 // Create a new category
 exports.createCategory = async (req, res) => {
     try {
-        console.log("Request received to create category");
         const { name, status, badgeName, showOnFrontend, parentCategory } = req.body;
         if (!name) {
             return res.status(400).json({ success: false, message: 'Category name is required' });
@@ -19,7 +18,6 @@ exports.createCategory = async (req, res) => {
             imageUrl = result.secure_url;
         }
 
-        // Validate parentCategory
         let validatedParentCategory = null;
         if (parentCategory) {
             if (mongoose.isValidObjectId(parentCategory)) {

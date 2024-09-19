@@ -8,20 +8,14 @@ const mongoose = require('mongoose');
 exports.applyCouponToCart = async (req, res) => {
     try {
         const { couponCode, cartItems, userId } = req.body;
-        console.log("Received couponCode:", couponCode);
-        console.log("Received cartItems:", cartItems);
-        console.log("Received userId:", userId);
 
-        // Validate input
         if (!couponCode || !Array.isArray(cartItems) || cartItems.length === 0 || !userId) {
             return res.status(400).json({ success: false, message: 'Invalid input' });
         }
 
-        // Find the coupon
         const coupon = await Coupon.findOne({ code: couponCode });
         if (!coupon) return res.status(400).json({ success: false, message: 'Invalid coupon code' });
 
-        // Check coupon expiration and usage limit
         const currentDate = new Date();
         if (coupon.expirationDate && currentDate > coupon.expirationDate) {
             return res.status(400).json({ success: false, message: 'Coupon has expired' });
@@ -30,7 +24,6 @@ exports.applyCouponToCart = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Coupon usage limit exceeded' });
         }
 
-        // Calculate the total amount considering variants
         let totalAmount = 0;
         for (const item of cartItems) {
             const product = await Product.findById(item.product);
@@ -40,7 +33,6 @@ exports.applyCouponToCart = async (req, res) => {
             totalAmount += price * item.quantity;
         }
 
-        // Calculate discount
         let discount = 0;
         if (coupon.discountType === 'percentage') {
             discount = (totalAmount * coupon.discountValue) / 100;
@@ -48,24 +40,17 @@ exports.applyCouponToCart = async (req, res) => {
             discount = coupon.discountValue;
         }
 
-        // Ensure the discount does not exceed the total amount
         const finalAmount = Math.max(totalAmount - discount, 0);
 
-        // Update coupon usage count
         coupon.usedCount += 1;
         await coupon.save();
 
-        // Save the discount and final amount to the user's cart
         const userCart = await Cart.findOne({ userId });
         if (userCart) {
             userCart.discountedTotal = finalAmount;
-            userCart.couponCode = couponCode; // Optionally save the coupon code used
+            userCart.couponCode = couponCode;
             await userCart.save();
         }
-
-        console.log("Total amount:", totalAmount);
-        console.log("Calculated discount:", discount);
-        console.log("Final amount after discount:", finalAmount);
 
         res.json({ success: true, discount, finalAmount });
 
