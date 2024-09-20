@@ -4,6 +4,7 @@ const User = require('../model/User');
 const Variant = require('../model/Variant');
 const Coupon = require('../model/Coupon');
 const mongoose = require('mongoose');
+const Order = require('../model/Order');
 
 exports.applyCouponToCart = async (req, res) => {
     try {
@@ -25,18 +26,21 @@ exports.applyCouponToCart = async (req, res) => {
         }
 
         let totalAmount = 0;
+        let totalItems = new Set();
         for (const item of cartItems) {
-            const product = await Product.findById(item.product);
             const variant = await Variant.findById(item.variant);
-            const price = variant ? variant.price : 0;
-
-            totalAmount += price * item.quantity;
+            if (!variant) {
+                console.error('Variant not found for ID:', item.variant);
+                return res.status(404).json({ success: false, message: `Variant not found for ID ${item.variant}` });
+            }
+            totalAmount += variant.price * item.quantity;
+            totalItems.add(item.product);
         }
 
         let discount = 0;
         if (coupon.discountType === 'percentage') {
             discount = (totalAmount * coupon.discountValue) / 100;
-        } else {
+        } else if (coupon.discountType === 'fixed') {
             discount = coupon.discountValue;
         }
 
@@ -47,18 +51,22 @@ exports.applyCouponToCart = async (req, res) => {
 
         const userCart = await Cart.findOne({ userId });
         if (userCart) {
+            userCart.subtotal = totalAmount;
+            userCart.totalItems = totalItems.size;
             userCart.discountedTotal = finalAmount;
+            userCart.discount = discount;
             userCart.couponCode = couponCode;
             await userCart.save();
         }
 
-        res.json({ success: true, discount, finalAmount });
+        res.json({ success: true, discount, finalAmount, subtotal: totalAmount, totalItems: totalItems.size });
 
     } catch (error) {
         console.error('Error applying coupon:', error.message);
         res.status(500).json({ success: false, message: 'Internal server error' });
     }
 };
+
 
 exports.addToCart = async (req, res) => {
     try {
@@ -155,13 +163,19 @@ exports.getCart = async (req, res) => {
                 data: { items: [], totalAmount: 0 }
             });
         }
-        let totalAmount = 0;
-        cart.items.forEach(item => {
-            const variantPrice = item.variant.price;
-            totalAmount += variantPrice * item.quantity;
-        });
+        let totalAmount = cart.discountedTotal > 0 ? cart.discountedTotal : 0;
 
-        res.status(200).json({ success: true, data: { cart, totalAmount } });
+        if (!cart.discountedTotal) {
+            cart.items.forEach(item => {
+                const variantPrice = item.variant.price;
+                totalAmount += variantPrice * item.quantity;
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: { cart, totalAmount, discount: cart.discount || 0, couponCode: cart.couponCode || null }
+        });
     } catch (err) {
         console.error('Error fetching cart:', err.message);
         res.status(500).json({ success: false, message: 'Internal server error' });

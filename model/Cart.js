@@ -9,7 +9,12 @@ const cartItemSchema = new mongoose.Schema({
 const CartSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     items: [cartItemSchema],
-    isActive: { type: Boolean, default: true }
+    couponCode: { type: String },
+    subtotal: { type: Number, default: 0 },
+    discount: { type: Number, default: 0 },
+    discountedTotal: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true },
+    totalItems: { type: Number, default: 0 } 
 }, { timestamps: true });
 
 module.exports = mongoose.model('Cart', CartSchema);
