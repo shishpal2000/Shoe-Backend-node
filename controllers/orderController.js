@@ -8,20 +8,23 @@ const generateOrderNumber = () => {
     const randomDigits = Math.floor(100000000 + Math.random() * 900000000);
     return `ORD_#${randomDigits}`;
 };
-
 exports.createOrder = async (req, res) => {
     try {
-        const { userId, cartItems, shippingAddress, billingAddress, couponCode } = req.body;
+        const { userId, shippingAddress, billingAddress, couponCode } = req.body;
 
+        // Find the user
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
 
-        if (!cartItems || cartItems.length === 0) {
-            return res.status(400).json({ success: false, message: 'No cart items provided' });
+        // Fetch cart for the user
+        const cart = await Cart.findOne({ userId, isActive: true });
+        if (!cart || !cart.subtotal || !cart.discountedTotal) {
+            return res.status(400).json({ success: false, message: 'Cart not found or total missing' });
         }
 
+        // Handle addresses (update if existing, otherwise create new)
         const handleAddress = async (address, type) => {
             if (address._id) {
                 return await Address.findByIdAndUpdate(address._id, { ...address, type }, { new: true });
@@ -33,77 +36,41 @@ exports.createOrder = async (req, res) => {
         const shippingAddr = await handleAddress(shippingAddress, 'Shipping');
         const billingAddr = await handleAddress(billingAddress, 'Billing');
 
-        let totalAmount = 0;
-        const updatedItems = [];
+        // Use cart totals
+        const totalAmount = cart.subtotal; // Total before discount
+        const discount = cart.discount;    // Applied discount
+        const finalTotal = cart.discountedTotal;  // Final total after discount
 
-        for (const item of cartItems) {
-            if (!item || !item.product) {
-                console.error('Invalid cart item:', item);
-                return res.status(400).json({ success: false, message: 'Invalid cart item' });
-            }
-
-            const product = await Product.findById(item.product).populate('variants');
-            if (!product) {
-                console.error('Product not found for ID:', item.product);
-                return res.status(404).json({ success: false, message: `Product not found for ID ${item.product}` });
-            }
-
-            if (!Array.isArray(product.variants)) {
-                console.error('Product variants is not an array:', product.variants);
-                return res.status(400).json({ success: false, message: 'Invalid product variants' });
-            }
-
-            if (!item.variantId) {  
-                console.error('Variant ID not provided for cart item:', item);
-                return res.status(400).json({ success: false, message: 'Variant ID not provided' });
-            }
-
-            const variant = product.variants.find(v => v._id.toString() === item.variantId.toString());
-            if (!variant || !variant.price || !variant.size) {
-                console.error('Variant is missing required fields:', variant);
-                return res.status(400).json({ success: false, message: 'Variant is missing required fields' });
-            }
-
-            const price = variant.price;
-            totalAmount += item.quantity * price;
-
-            updatedItems.push({
-                product: item.product,
-                variantId: item.variantId,
-                quantity: item.quantity
-            });
-        }
-
-        let discount = 0;
-        if (couponCode) {
-            discount = calculateDiscount(couponCode, totalAmount);
-        }
-
-        const finalTotal = totalAmount - discount;
+        // Generate order number
         const orderNumber = generateOrderNumber();
 
+        // Create the order
         const order = new Order({
             userId,
-            cartItems: updatedItems,
+            cartItems: cart.items,
             totalAmount,
             discount,
             finalTotal,
-            couponCode,
+            couponCode: cart.couponCode,
             shippingAddress: shippingAddr,
             billingAddress: billingAddr,
             orderNumber,
             status: 'Pending',
-
         });
 
         await order.save();
 
+        cart.isActive = false;
+        await cart.save();
+
         res.status(201).json({ success: true, orderId: order._id, orderNumber });
+
     } catch (err) {
         console.error("Error creating order:", err);
         res.status(500).json({ success: false, message: err.message });
     }
 };
+
 
 
 // Get a specific order by orderId

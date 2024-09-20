@@ -76,33 +76,14 @@ exports.verifyPayment = async (req, res) => {
         const order = await Order.findById(payment.orderId);
         if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
 
-        // Update order with payment details
         order.razorpayPaymentId = razorpayPaymentId;
         order.razorpaySignature = razorpaySignature;
         order.paymentStatus = 'Paid';
-        order.status = 'Paid';
+        order.status = 'Processing';
         await order.save();
 
-        // Save shipping details here
-        // const shippingDetails = {
-        //     orderId: order._id,
-        //     shipmentAddress: order.shippingAddress, // Assuming order contains shippingAddress
-        //     totalQuantity: order.cartItems.reduce((acc, item) => acc + item.quantity, 0), // Calculate total quantity
-        //     shippingDate: new Date(), 
-        //     orderDate: new Date(), 
-        //     shippingNumber: `SHIP_#${Math.floor(10000000 + Math.random() * 90000000)}` // Generate shipping number
-        // };
-
-        // console.log('ship>>>>>>>>>', shippingDetails);
-        // const newShipping = new Shipping(shippingDetails);
-        // await newShipping.save();
-        
-        const cart = await Cart.findOne({ userId: order.userId });
+        const cart = await Cart.findOneAndDelete({ userId: order.userId });
         if (cart) {
-            cart.items = [];
-            // cart.isActive = false;
-            await cart.save();
-
             console.log('Cart cleared for user:', order.userId);
         } else {
             console.error('Cart not found for user:', order.userId);
