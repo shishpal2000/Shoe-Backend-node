@@ -6,7 +6,7 @@ const Variant = require('../model/Variant');
 
 const generateOrderNumber = () => {
     const randomDigits = Math.floor(100000000 + Math.random() * 900000000);
-    return `ORD_${randomDigits}`;
+    return `ORD_#${randomDigits}`;
 };
 
 exports.createOrder = async (req, res) => {
@@ -42,7 +42,7 @@ exports.createOrder = async (req, res) => {
                 return res.status(400).json({ success: false, message: 'Invalid cart item' });
             }
 
-            const product = await Product.findById(item.product);
+            const product = await Product.findById(item.product).populate('variants');
             if (!product) {
                 console.error('Product not found for ID:', item.product);
                 return res.status(404).json({ success: false, message: `Product not found for ID ${item.product}` });
@@ -53,15 +53,15 @@ exports.createOrder = async (req, res) => {
                 return res.status(400).json({ success: false, message: 'Invalid product variants' });
             }
 
-            if (!item.variant) {
+            if (!item.variantId) {  
                 console.error('Variant ID not provided for cart item:', item);
                 return res.status(400).json({ success: false, message: 'Variant ID not provided' });
             }
 
-            const variant = product.variants.find(v => v._id.toString() === item.variant.toString());
+            const variant = product.variants.find(v => v._id.toString() === item.variantId.toString());
             if (!variant || !variant.price || !variant.size) {
                 console.error('Variant is missing required fields:', variant);
-                return res.status(400).json({ success: false, message: `Variant is missing required fields` });
+                return res.status(400).json({ success: false, message: 'Variant is missing required fields' });
             }
 
             const price = variant.price;
@@ -69,13 +69,14 @@ exports.createOrder = async (req, res) => {
 
             updatedItems.push({
                 product: item.product,
-                variantId: item.variant,
+                variantId: item.variantId,
                 quantity: item.quantity
             });
         }
 
         let discount = 0;
         if (couponCode) {
+            discount = calculateDiscount(couponCode, totalAmount);
         }
 
         const finalTotal = totalAmount - discount;
@@ -91,7 +92,8 @@ exports.createOrder = async (req, res) => {
             shippingAddress: shippingAddr,
             billingAddress: billingAddr,
             orderNumber,
-            status: 'Pending'
+            status: 'Pending',
+
         });
 
         await order.save();
@@ -121,7 +123,6 @@ exports.getOrderById = async (req, res) => {
                 select: 'size color price quantity',
                 strictPopulate: false
             });
-        console.log(order.cartItems);
 
         if (!order) {
             return res.status(404).json({ success: false, message: 'Order not found' });

@@ -160,27 +160,41 @@ exports.getCart = async (req, res) => {
             return res.status(200).json({
                 success: true,
                 message: "Cart is empty",
-                data: { items: [], totalAmount: 0 }
+                data: { items: [], totalAmount: 0, subtotal: 0, discount: 0, couponCode: null }
             });
         }
-        let totalAmount = cart.discountedTotal > 0 ? cart.discountedTotal : 0;
 
+        // Calculate the total amount based on discounted total or subtotal
+        let totalAmount = cart.discountedTotal > 0 ? cart.discountedTotal : 0;
+        let subtotal = 0;
+
+        // If no discounted total, calculate subtotal from items
         if (!cart.discountedTotal) {
             cart.items.forEach(item => {
                 const variantPrice = item.variant.price;
+                subtotal += variantPrice * item.quantity;
                 totalAmount += variantPrice * item.quantity;
             });
+        } else {
+            subtotal = cart.subtotal;
         }
 
         res.status(200).json({
             success: true,
-            data: { cart, totalAmount, discount: cart.discount || 0, couponCode: cart.couponCode || null }
+            data: {
+                cart,
+                totalAmount,
+                subtotal,
+                discount: cart.discount || 0,
+                couponCode: cart.couponCode || null
+            }
         });
     } catch (err) {
         console.error('Error fetching cart:', err.message);
         res.status(500).json({ success: false, message: 'Internal server error' });
     }
 };
+
 
 exports.removeFromCart = async (req, res) => {
     try {

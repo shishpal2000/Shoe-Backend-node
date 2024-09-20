@@ -3,7 +3,7 @@ const Order = require('../model/Order');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const Cart = require('../model/Cart');
-
+const Shipping = require('../model/Shipment')
 
 const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
@@ -76,17 +76,31 @@ exports.verifyPayment = async (req, res) => {
         const order = await Order.findById(payment.orderId);
         if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
 
-
+        // Update order with payment details
         order.razorpayPaymentId = razorpayPaymentId;
         order.razorpaySignature = razorpaySignature;
         order.paymentStatus = 'Paid';
         order.status = 'Paid';
         await order.save();
 
-        const cart = await Cart.findOne({ user: order.userId });
+        // Save shipping details here
+        // const shippingDetails = {
+        //     orderId: order._id,
+        //     shipmentAddress: order.shippingAddress, // Assuming order contains shippingAddress
+        //     totalQuantity: order.cartItems.reduce((acc, item) => acc + item.quantity, 0), // Calculate total quantity
+        //     shippingDate: new Date(), 
+        //     orderDate: new Date(), 
+        //     shippingNumber: `SHIP_#${Math.floor(10000000 + Math.random() * 90000000)}` // Generate shipping number
+        // };
+
+        // console.log('ship>>>>>>>>>', shippingDetails);
+        // const newShipping = new Shipping(shippingDetails);
+        // await newShipping.save();
+        
+        const cart = await Cart.findOne({ userId: order.userId });
         if (cart) {
             cart.items = [];
-            cart.isActive = false;
+            // cart.isActive = false;
             await cart.save();
 
             console.log('Cart cleared for user:', order.userId);
@@ -94,12 +108,13 @@ exports.verifyPayment = async (req, res) => {
             console.error('Cart not found for user:', order.userId);
         }
 
-        res.status(200).json({ success: true, message: 'Payment verified and order updated' });
+        res.status(200).json({ success: true, message: 'Payment verified, order updated, and shipping details saved' });
     } catch (error) {
         console.error("Error verifying payment:", error);
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
 
 exports.paymentFailure = async (req, res) => {
     try {
