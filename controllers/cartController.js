@@ -6,67 +6,80 @@ const Coupon = require('../model/Coupon');
 const mongoose = require('mongoose');
 const Order = require('../model/Order');
 
+const calculateCartTotals = async (cart) => {
+    let totalAmount = 0;
+    let totalItems = new Set();
+
+    const variantPromises = cart.items.map(item => Variant.findById(item.variant));
+    const variants = await Promise.all(variantPromises);
+
+    for (const [index, variant] of variants.entries()) {
+        if (variant) {
+            totalAmount += variant.price * cart.items[index].quantity;
+            totalItems.add(cart.items[index].product.toString());
+        }
+    }
+
+    return { totalAmount, totalItems: totalItems.size };
+};
+
+
 exports.applyCouponToCart = async (req, res) => {
     try {
-        const { couponCode, cartItems, userId } = req.body;
+        const { couponCode, userId } = req.body;
 
-        if (!couponCode || !Array.isArray(cartItems) || cartItems.length === 0 || !userId) {
+        if (!userId || !couponCode) {
             return res.status(400).json({ success: false, message: 'Invalid input' });
         }
 
-        const coupon = await Coupon.findOne({ code: couponCode });
-        if (!coupon) return res.status(400).json({ success: false, message: 'Invalid coupon code' });
+        let cart = await Cart.findOne({ userId });
+        if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
 
-        const currentDate = new Date();
-        if (coupon.expirationDate && currentDate > coupon.expirationDate) {
-            return res.status(400).json({ success: false, message: 'Coupon has expired' });
-        }
-        if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
-            return res.status(400).json({ success: false, message: 'Coupon usage limit exceeded' });
-        }
-
-        let totalAmount = 0;
-        let totalItems = new Set();
-        for (const item of cartItems) {
-            const variant = await Variant.findById(item.variant);
-            if (!variant) {
-                console.error('Variant not found for ID:', item.variant);
-                return res.status(404).json({ success: false, message: `Variant not found for ID ${item.variant}` });
-            }
-            totalAmount += variant.price * item.quantity;
-            totalItems.add(item.product);
-        }
+        const { totalAmount, totalItems } = await calculateCartTotals(cart);
 
         let discount = 0;
-        if (coupon.discountType === 'percentage') {
-            discount = (totalAmount * coupon.discountValue) / 100;
-        } else if (coupon.discountType === 'fixed') {
-            discount = coupon.discountValue;
+        if (couponCode) {
+            const coupon = await Coupon.findOne({ code: couponCode });
+            if (!coupon) {
+                return res.status(400).json({ success: false, message: 'Invalid coupon code' });
+            }
+
+            const currentDate = new Date();
+            if (coupon.expirationDate && currentDate > coupon.expirationDate) {
+                return res.status(400).json({ success: false, message: 'Coupon has expired' });
+            }
+
+            if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+                return res.status(400).json({ success: false, message: 'Coupon usage limit exceeded' });
+            }
+
+            if (coupon.discountType === 'percentage') {
+                discount = (totalAmount * coupon.discountValue) / 100;
+            } else if (coupon.discountType === 'fixed') {
+                discount = coupon.discountValue;
+            }
+
+            coupon.usedCount += 1;
+            await coupon.save();
         }
 
         const finalAmount = Math.max(totalAmount - discount, 0);
 
-        coupon.usedCount += 1;
-        await coupon.save();
+        cart.subtotal = totalAmount;
+        cart.discountedTotal = finalAmount;
+        cart.discount = discount;
+        cart.couponCode = couponCode || null;
+        cart.totalItems = totalItems; // Update total items
 
-        const userCart = await Cart.findOne({ userId });
-        if (userCart) {
-            userCart.subtotal = totalAmount;
-            userCart.totalItems = totalItems.size;
-            userCart.discountedTotal = finalAmount;
-            userCart.discount = discount;
-            userCart.couponCode = couponCode;
-            await userCart.save();
-        }
+        await cart.save();
 
-        res.json({ success: true, discount, finalAmount, subtotal: totalAmount, totalItems: totalItems.size });
+        return res.json({ success: true, discount, finalAmount, subtotal: totalAmount, totalItems });
 
     } catch (error) {
         console.error('Error applying coupon:', error.message);
         res.status(500).json({ success: false, message: 'Internal server error' });
     }
 };
-
 
 exports.addToCart = async (req, res) => {
     try {
@@ -110,6 +123,13 @@ exports.addToCart = async (req, res) => {
             }
         }
 
+        const { totalAmount, totalItems } = await calculateCartTotals(cart);
+
+        cart.subtotal = totalAmount;
+        cart.discount = 0; 
+        cart.discountedTotal = totalAmount; 
+        cart.couponCode = null; 
+
         await cart.save();
         res.status(200).json({ success: true, data: cart });
     } catch (err) {
@@ -129,19 +149,32 @@ exports.updateCartItemQuantity = async (req, res) => {
     }
 
     try {
-        const cart = await Cart.findOne({ userId });
+        const cart = await Cart.findOne({ userId }).populate('items.product items.variant');
         if (!cart) return res.status(404).json({ success: false, message: "Cart not found" });
 
+        console.log('Cart items:', cart.items);
+
         const itemIndex = cart.items.findIndex(item =>
-            item.product.toString() === productId && item.variant.toString() === variantId
+            item.product._id.toString() === productId && item.variant._id.toString() === variantId
         );
-        if (itemIndex === -1) return res.status(404).json({ success: false, message: "Item not found in cart" });
+
+        if (itemIndex === -1) {
+            console.log("Product ID:", productId);
+            console.log("Variant ID:", variantId);
+            return res.status(404).json({ success: false, message: "Item not found in cart" });
+        }
 
         if (quantity > 0) {
             cart.items[itemIndex].quantity = quantity;
         } else {
             cart.items.splice(itemIndex, 1);
         }
+
+        const { totalAmount, totalItems } = await calculateCartTotals(cart);
+        cart.subtotal = totalAmount;
+        cart.discountedTotal = totalAmount; 
+        cart.discount = 0; 
+        cart.couponCode = null; 
 
         await cart.save();
         res.status(200).json({ success: true, message: "Cart updated successfully", cart });
@@ -164,20 +197,8 @@ exports.getCart = async (req, res) => {
             });
         }
 
-        // Calculate the total amount based on discounted total or subtotal
-        let totalAmount = cart.discountedTotal > 0 ? cart.discountedTotal : 0;
-        let subtotal = 0;
-
-        // If no discounted total, calculate subtotal from items
-        if (!cart.discountedTotal) {
-            cart.items.forEach(item => {
-                const variantPrice = item.variant.price;
-                subtotal += variantPrice * item.quantity;
-                totalAmount += variantPrice * item.quantity;
-            });
-        } else {
-            subtotal = cart.subtotal;
-        }
+        let totalAmount = cart.discountedTotal > 0 ? cart.discountedTotal : cart.subtotal;
+        let subtotal = cart.subtotal; 
 
         res.status(200).json({
             success: true,
@@ -195,36 +216,34 @@ exports.getCart = async (req, res) => {
     }
 };
 
-
 exports.removeFromCart = async (req, res) => {
     try {
-        const { userId, productId, variantId } = req.params;
+        const { userId, itemId } = req.body;
 
-        if (!userId) return res.status(400).json({ success: false, message: 'User ID is required' });
-
-        const cart = await Cart.findOne({ userId }).populate('items.product').populate('items.variant');
-        if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
-
-        cart.items = cart.items.filter(item =>
-            !(item.product._id.toString() === productId && item.variant._id.toString() === variantId)
-        );
-
-        if (cart.items.length > 0) {
-            await cart.save();
-        } else {
-            await Cart.deleteOne({ userId });
+        if (!userId || !itemId) {
+            return res.status(400).json({ success: false, message: 'Invalid input' });
         }
 
-        let totalAmount = 0;
-        cart.items.forEach(item => {
-            totalAmount += item.variant.price * item.quantity;
-        });
+        const cart = await Cart.findOne({ userId });
+        if (!cart) {
+            return res.status(404).json({ success: false, message: 'Cart not found' });
+        }
 
-        return res.status(200).json({ success: true, data: { cart, totalAmount } });
+        const updatedItems = cart.items.filter(item => item._id.toString() !== itemId);
+        cart.items = updatedItems;
+
+        cart.totalItems = updatedItems.length;
+
+        const { subtotal, discountedTotal } = await calculateCartTotals(cart);
+        cart.subtotal = subtotal;
+        cart.discountedTotal = discountedTotal;
+
+        await cart.save();
+
+        res.json({ success: true, cart });
 
     } catch (error) {
-        console.error('Error removing from cart:', error.message);
-        return res.status(500).json({ success: false, message: 'Internal server error' });
+        console.error('Error removing item from cart:', error.message);
+        res.status(500).json({ success: false, message: 'Internal server error' });
     }
-};
-
+};    
