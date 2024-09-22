@@ -114,3 +114,54 @@ exports.getAllOrders = async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 };
+// Get all orders for a specific user
+exports.getUserOrders = async (req, res) => {
+    try {
+        const userId = req.params.userId;
+
+        // Fetch all orders for the user
+        const orders = await Order.find({ userId })
+            .populate('cartItems.product')
+            .populate('cartItems.variantId')
+            .sort({ createdAt: -1 }); // Sort by creation date
+
+        if (!orders || orders.length === 0) {
+            return res.status(404).json({ success: false, message: 'No orders found for this user' });
+        }
+
+        // Process the orders with product and variant details
+        const userOrders = await Promise.all(orders.map(async (order) => {
+            const cartItemsWithDetails = await Promise.all(order.cartItems.map(async (item) => {
+                // Fetch the product with product name and image
+                const product = await Product.findById(item.product).select('product_name images');
+
+                // Fetch the variant with price
+                const variant = await Variant.findById(item.variantId).select('price');
+
+                return {
+                    productName: product ? product.product_name : 'Unknown Product',
+                    productImage: product ? product.images : null, // Add the product image
+                    price: variant ? variant.price : 0,
+                    quantity: item.quantity,
+                };
+            }));
+
+            return {
+                orderId: order._id,
+                orderNumber: order.orderNumber,
+                orderStatus: order.status,
+                totalAmount: order.totalAmount,
+                finalTotal: order.finalTotal,
+                discount: order.discount,
+                createdAt: order.createdAt,
+                cartItems: cartItemsWithDetails,
+            };
+        }));
+
+        res.status(200).json({ success: true, orders: userOrders });
+    } catch (error) {
+        console.error("Error fetching user orders:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
