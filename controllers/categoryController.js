@@ -2,9 +2,8 @@ const Category = require('../model/Category');
 const { uploadToCloudinary } = require("../middleware/cloudinaryConfig.js");
 require('dotenv').config;
 const Product = require('../model/Product');
-const mongoose = require('mongoose'); 
+const mongoose = require('mongoose');
 
-// Create a new category
 exports.createCategory = async (req, res) => {
     try {
         const { name, status, badgeName, showOnFrontend, parentCategory } = req.body;
@@ -56,10 +55,15 @@ exports.createCategory = async (req, res) => {
 
 exports.getAllCategories = async (req, res) => {
     try {
-        const { showOnFrontend } = req.query;
+        const { showOnFrontend, includeParents } = req.query;
         let query = {};
+
         if (showOnFrontend !== undefined) {
             query.showOnFrontend = showOnFrontend === 'true';
+        }
+
+        if (includeParents === 'true') {
+            query.parentCategory = null; 
         }
 
         const categories = await Category.find(query).exec();
@@ -69,7 +73,6 @@ exports.getAllCategories = async (req, res) => {
         res.status(400).json({ success: false, message: err.message });
     }
 };
-
 
 // Get a category by ID
 exports.getCategoryById = async (req, res) => {

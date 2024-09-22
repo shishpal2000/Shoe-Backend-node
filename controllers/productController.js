@@ -98,16 +98,6 @@ exports.getAllProducts = async (req, res) => {
     try {
         const { product_slug, productId, isNewArrival, category, ...filters } = req.query;
 
-        let categoryObjectId = null;
-        if (category) {
-            const categoryDoc = await Category.findOne({ name: new RegExp(`^${category}$`, 'i') }).exec(); // Case-insensitive search
-            if (categoryDoc) {
-                categoryObjectId = categoryDoc._id;
-            } else {
-                return res.status(400).json({ success: false, message: 'Invalid category name' });
-            }
-        }
-
         if (product_slug) {
             const product = await Product.findOne({ product_slug })
                 .populate({
@@ -135,10 +125,10 @@ exports.getAllProducts = async (req, res) => {
                     match: { approved: true },
                     populate: {
                         path: 'user',
-                        select: 'firstName'  // Adjust fields as needed
+                        select: 'firstName'  
                     }
                 })
-                .populate('variants')  // Populate variants without reviews
+                .populate('variants')  
                 .exec();
             if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
@@ -150,8 +140,13 @@ exports.getAllProducts = async (req, res) => {
             query.isNewArrival = isNewArrival === 'true';
         }
 
-        if (categoryObjectId) {
-            query['categories'] = categoryObjectId;
+        if (category) {
+            const categoryDoc = await Category.findOne({ slug: new RegExp(`^${category}$`, 'i') }).exec();
+            if (categoryDoc) {
+                query['categories'] = categoryDoc._id;
+            } else {
+                return res.status(404).json({ success: false, message: 'Category not found' });
+            }
         }
 
         Object.keys(filters).forEach(filterKey => {
@@ -208,7 +203,6 @@ exports.getAllProducts = async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 };
-
 
 // Update a product by ID
 exports.updateProduct = async (req, res) => {

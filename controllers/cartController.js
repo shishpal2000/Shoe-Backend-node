@@ -126,9 +126,9 @@ exports.addToCart = async (req, res) => {
         const { totalAmount, totalItems } = await calculateCartTotals(cart);
 
         cart.subtotal = totalAmount;
-        cart.discount = 0; 
-        cart.discountedTotal = totalAmount; 
-        cart.couponCode = null; 
+        cart.discount = 0;
+        cart.discountedTotal = totalAmount;
+        cart.couponCode = null;
 
         await cart.save();
         res.status(200).json({ success: true, data: cart });
@@ -172,9 +172,9 @@ exports.updateCartItemQuantity = async (req, res) => {
 
         const { totalAmount, totalItems } = await calculateCartTotals(cart);
         cart.subtotal = totalAmount;
-        cart.discountedTotal = totalAmount; 
-        cart.discount = 0; 
-        cart.couponCode = null; 
+        cart.discountedTotal = totalAmount;
+        cart.discount = 0;
+        cart.couponCode = null;
 
         await cart.save();
         res.status(200).json({ success: true, message: "Cart updated successfully", cart });
@@ -198,7 +198,7 @@ exports.getCart = async (req, res) => {
         }
 
         let totalAmount = cart.discountedTotal > 0 ? cart.discountedTotal : cart.subtotal;
-        let subtotal = cart.subtotal; 
+        let subtotal = cart.subtotal;
 
         res.status(200).json({
             success: true,
@@ -217,19 +217,19 @@ exports.getCart = async (req, res) => {
 };
 
 exports.removeFromCart = async (req, res) => {
+    const { userId, productId, variantId } = req.params; 
+
+    if (!userId || !variantId) {
+        return res.status(400).json({ success: false, message: 'Invalid input' });
+    }
+
     try {
-        const { userId, itemId } = req.body;
-
-        if (!userId || !itemId) {
-            return res.status(400).json({ success: false, message: 'Invalid input' });
-        }
-
         const cart = await Cart.findOne({ userId });
         if (!cart) {
             return res.status(404).json({ success: false, message: 'Cart not found' });
         }
 
-        const updatedItems = cart.items.filter(item => item._id.toString() !== itemId);
+        const updatedItems = cart.items.filter(item => item.variant._id.toString() !== variantId);
         cart.items = updatedItems;
 
         cart.totalItems = updatedItems.length;
@@ -246,4 +246,5 @@ exports.removeFromCart = async (req, res) => {
         console.error('Error removing item from cart:', error.message);
         res.status(500).json({ success: false, message: 'Internal server error' });
     }
-};    
+};
+
