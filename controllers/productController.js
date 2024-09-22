@@ -96,7 +96,9 @@ exports.createProduct = async (req, res) => {
 
 exports.getAllProducts = async (req, res) => {
     try {
-        const { product_slug, productId, isNewArrival, category, ...filters } = req.query;
+        const { product_slug, productId, isNewArrival, category, size, color, ...filters } = req.query;
+        console.log('Received query parameters:', req.query);
+        console.log('Filters after extraction:', filters);
 
         if (product_slug) {
             const product = await Product.findOne({ product_slug })
@@ -125,10 +127,10 @@ exports.getAllProducts = async (req, res) => {
                     match: { approved: true },
                     populate: {
                         path: 'user',
-                        select: 'firstName'  
+                        select: 'firstName'
                     }
                 })
-                .populate('variants')  
+                .populate('variants')
                 .exec();
             if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
@@ -150,7 +152,8 @@ exports.getAllProducts = async (req, res) => {
         }
 
         Object.keys(filters).forEach(filterKey => {
-            if (filterKey === 'size' || filterKey === 'color' || filterKey === 'price') {
+            // Check for size, color, price, and subcategory
+            if (['size', 'color', 'price'].includes(filterKey)) {
                 query[`variants.${filterKey}`] = { $in: filters[filterKey].split(',') };
             } else if (filterKey === 'subcategory') {
                 query['subcategories'] = { $in: filters[filterKey].split(',') };
@@ -158,7 +161,8 @@ exports.getAllProducts = async (req, res) => {
                 query[filterKey] = filters[filterKey];
             }
         });
-
+        console.log('Constructed query:', query);
+       
         let productQuery = Product.find(query)
             .populate({
                 path: 'reviews',
@@ -168,7 +172,7 @@ exports.getAllProducts = async (req, res) => {
                     select: 'firstName'
                 }
             })
-            .populate('variants'); 
+            .populate('variants');
 
         if (Product.schema.path('category')) {
             productQuery = productQuery.populate('category');
