@@ -109,6 +109,11 @@ exports.getAllProducts = async (req, res) => {
                     }
                 })
                 .populate('variants')
+                .populate({
+                    path: 'categories',
+                    select: 'name parentCategory',
+                    populate: { path: 'parentCategory', select: 'name' }
+                })
                 .exec();
             if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
@@ -129,6 +134,11 @@ exports.getAllProducts = async (req, res) => {
                     }
                 })
                 .populate('variants')
+                .populate({
+                    path: 'categories',
+                    select: 'name parentCategory',
+                    populate: { path: 'parentCategory', select: 'name' }
+                })
                 .exec();
             if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
@@ -170,7 +180,12 @@ exports.getAllProducts = async (req, res) => {
                     select: 'firstName'
                 }
             })
-            .populate('variants');
+            .populate('variants')
+            .populate({
+                path: 'categories',
+                select: 'name parentCategory',
+                populate: { path: 'parentCategory', select: 'name' }
+            });
 
         if (Product.schema.path('category')) {
             productQuery = productQuery.populate('category');
@@ -181,8 +196,15 @@ exports.getAllProducts = async (req, res) => {
         const categories = await Category.find().exec();
         const variants = await Variant.find().exec();
 
-        const parentCategories = categories.filter(cat => !cat.parentCategory);
-        const childCategories = categories.filter(cat => cat.parentCategory);
+        const parentCategories = categories.filter(cat => !cat.parentCategory).map(cat => ({
+            _id: cat._id,
+            name: cat.name
+        }));
+        const childCategories = categories.filter(cat => cat.parentCategory).map(cat => ({
+            _id: cat._id,
+            name: cat.name,
+            parentCategory: cat.parentCategory
+        }));
 
         const sizes = [...new Set(variants.flatMap(v => v.size || []))];
         const colors = [...new Set(variants.flatMap(v => v.color || []))];
@@ -209,7 +231,7 @@ exports.getAllProducts = async (req, res) => {
 // Update a product by ID
 exports.updateProduct = async (req, res) => {
     try {
-        const { productId } = req.params;
+        const { id } = req.params;
         const { product_name, categories, description, video_url, sku, variants, isNewArrival } = req.body;
 
         // Parse variants
@@ -221,7 +243,7 @@ exports.updateProduct = async (req, res) => {
         }
 
         // Find the existing product
-        const product = await Product.findById(productId);
+        const product = await Product.findById(id);
         if (!product) {
             return res.status(404).json({ success: false, message: 'Product not found' });
         }
@@ -232,7 +254,7 @@ exports.updateProduct = async (req, res) => {
         // Check if the product name already exists for another product
         if (product_name && product_name !== product.product_name) {
             const existingProduct = await Product.findOne({ product_name });
-            if (existingProduct && existingProduct._id.toString() !== productId) {
+            if (existingProduct && existingProduct._id.toString() !== id) {
                 return res.status(400).json({ success: false, message: 'Product name already exists' });
             }
         }
@@ -318,7 +340,24 @@ exports.updateProduct = async (req, res) => {
     }
 };
 
+exports.getProductById = async (req, res) => {
+    try {
+        const { id } = req.params;
 
+        const product = await Product.findById(id)
+            .populate('categories', 'name parentCategory')
+            .populate('variants')
+            .exec();
+
+        if (!product) {
+            return res.status(404).json({ success: false, message: 'Product not found' });
+        }
+
+        return res.status(200).json({ success: true, data: product });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+};
 
 exports.getProductVariants = async (req, res) => {
     try {
