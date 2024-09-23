@@ -152,15 +152,12 @@ exports.updateCartItemQuantity = async (req, res) => {
         const cart = await Cart.findOne({ userId }).populate('items.product items.variant');
         if (!cart) return res.status(404).json({ success: false, message: "Cart not found" });
 
-        console.log('Cart items:', cart.items);
 
         const itemIndex = cart.items.findIndex(item =>
             item.product._id.toString() === productId && item.variant._id.toString() === variantId
         );
 
         if (itemIndex === -1) {
-            console.log("Product ID:", productId);
-            console.log("Variant ID:", variantId);
             return res.status(404).json({ success: false, message: "Item not found in cart" });
         }
 

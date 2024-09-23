@@ -47,12 +47,10 @@ exports.createProduct = async (req, res) => {
 
         let attachment = [];
         if (req.files) {
-            for (const file of req.files) {
+            attachment = await Promise.all(req.files.map(async (file) => {
                 const result = await uploadToCloudinary(file.buffer, 'product-images');
-                attachment.push({
-                    url: result.secure_url,
-                });
-            }
+                return { url: result.secure_url };
+            }));
         }
 
         const product = new Product({
@@ -162,7 +160,7 @@ exports.getAllProducts = async (req, res) => {
             }
         });
         console.log('Constructed query:', query);
-       
+
         let productQuery = Product.find(query)
             .populate({
                 path: 'reviews',
@@ -212,10 +210,15 @@ exports.getAllProducts = async (req, res) => {
 exports.updateProduct = async (req, res) => {
     try {
         const { productId } = req.params;
-        const { product_name, category, description, sku, variants, isNewArrival } = req.body;
-        console.log("update", req.body);
+        const { product_name, categories, description, video_url, sku, variants, isNewArrival } = req.body;
 
-        const parsedVariants = JSON.parse(variants);
+        // Parse variants
+        let parsedVariants;
+        try {
+            parsedVariants = JSON.parse(variants);
+        } catch (err) {
+            return res.status(400).json({ success: false, message: 'Invalid JSON format for variants' });
+        }
 
         // Find the existing product
         const product = await Product.findById(productId);
@@ -234,40 +237,59 @@ exports.updateProduct = async (req, res) => {
             }
         }
 
-        // Check if category exists and update if necessary
-        if (category && (!product.category || category.toString() !== product.category.toString())) {
-            const existingCategory = await Category.findById(category);
-            if (!existingCategory) {
-                return res.status(400).json({ success: false, message: 'Category not found' });
-            }
+        // Handle categories update
+        let categoryArray = [];
+        if (!categories) {
+            return res.status(400).json({ success: false, message: 'Please provide both parent and subcategory IDs' });
+        }
 
-            // Remove product from old category and add to new category
-            if (product.category) {
-                const oldCategory = await Category.findById(product.category);
+        if (typeof categories === 'string') {
+            try {
+                categoryArray = JSON.parse(categories);
+            } catch (error) {
+                return res.status(400).json({ success: false, message: 'Invalid format for categories' });
+            }
+        } else if (Array.isArray(categories)) {
+            categoryArray = categories;
+        }
+
+        if (categoryArray.length !== 2) {
+            return res.status(400).json({ success: false, message: 'Please provide both parent and subcategory IDs' });
+        }
+
+        // Update categories if necessary
+        if (categoryArray.toString() !== product.categories.toString()) {
+            // Remove product from old categories
+            for (const categoryId of product.categories) {
+                const oldCategory = await Category.findById(categoryId);
                 if (oldCategory) {
                     oldCategory.products.pull(product._id);
                     await oldCategory.save();
                 }
             }
 
-            existingCategory.products.push(product._id);
-            await existingCategory.save();
+            // Add product to new categories
+            for (const categoryId of categoryArray) {
+                const newCategory = await Category.findById(categoryId);
+                if (!newCategory) {
+                    return res.status(400).json({ success: false, message: `Category ${categoryId} not found` });
+                }
+                newCategory.products.push(product._id);
+                await newCategory.save();
+            }
 
-            product.category = category;
+            product.categories = categoryArray;
         }
 
-        // Handle file uploads if there are any new files
-        if (req.files) {
-            let attachment = [];
-            for (const file of req.files) {
+        // Handle file uploads
+        if (req.files && req.files.length > 0) {
+            const attachments = await Promise.all(req.files.map(async (file) => {
                 const result = await uploadToCloudinary(file.buffer, 'product-images');
-                attachment.push({
+                return {
                     url: result.secure_url,
-                    type: result.resource_type,
-                    public_id: result.public_id
-                });
-            }
-            product.images = attachment;
+                };
+            }));
+            product.images = attachments;
         }
 
         // Update other fields
@@ -275,13 +297,14 @@ exports.updateProduct = async (req, res) => {
         if (product_slug) product.product_slug = product_slug;
         if (description) product.description = description;
         if (sku) product.sku = sku;
+        if (video_url) product.video_url = video_url;
         if (isNewArrival !== undefined) product.isNewArrival = isNewArrival;
 
         await product.save();
 
         // Update variants
         await Variant.deleteMany({ product: product._id });
-        for (let variantData of parsedVariants) {
+        for (const variantData of parsedVariants) {
             const variant = new Variant({
                 ...variantData,
                 product: product._id
@@ -294,6 +317,8 @@ exports.updateProduct = async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 };
+
+
 
 exports.getProductVariants = async (req, res) => {
     try {

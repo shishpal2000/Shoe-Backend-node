@@ -8,7 +8,6 @@ const generateShippingNumber = () => {
 };
 
 exports.createShipping = async (req, res) => {
-    console.log('Request body:', req.body);
     try {
         const { orderId, shipmentAddress } = req.body;
 
@@ -34,7 +33,6 @@ exports.createShipping = async (req, res) => {
             shipmentDate: new Date()
         });
 
-        console.log('Shipping details to be saved:', shippingDetails);
 
         await shippingDetails.save();
 
