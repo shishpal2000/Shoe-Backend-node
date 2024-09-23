@@ -47,7 +47,16 @@ exports.createShipping = async (req, res) => {
 
 exports.getAllShipments = async (req, res) => {
     try {
-        const shipments = await Shipping.find().populate('orderId').exec();
+        const shipments = await Shipping.find()
+            .populate({
+                path: 'orderId',
+                populate: [
+                    { path: 'shippingAddress' },
+                    { path: 'billingAddress' }
+                ]
+            })
+            .exec();
+
         res.status(200).json({ success: true, shipments });
     } catch (err) {
         console.error("Error fetching shipments:", err);
@@ -55,19 +64,31 @@ exports.getAllShipments = async (req, res) => {
     }
 };
 
+
 exports.getShipmentById = async (req, res) => {
     const { id } = req.params;
     try {
-        const shipment = await Shipping.findById(id).populate('orderId').exec();
+        const shipment = await Shipping.findById(id)
+            .populate({
+                path: 'orderId',
+                populate: [
+                    { path: 'shippingAddress' },
+                    { path: 'billingAddress' }
+                ]
+            })
+            .exec();
+
         if (!shipment) {
             return res.status(404).json({ success: false, message: 'Shipment not found' });
         }
+
         res.status(200).json({ success: true, shipment });
     } catch (err) {
         console.error("Error fetching shipment:", err);
         res.status(500).json({ success: false, message: err.message });
     }
 };
+
 
 exports.deleteShipment = async (req, res) => {
     const { id } = req.params;
