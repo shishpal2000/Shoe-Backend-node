@@ -81,6 +81,34 @@ exports.applyCouponToCart = async (req, res) => {
     }
 };
 
+exports.removeCouponFromCart = async (req, res) => {
+    try {
+        const { userId } = req.body;
+
+        if (!userId) {
+            return res.status(400).json({ success: false, message: 'Invalid input' });
+        }
+
+        let cart = await Cart.findOne({ userId });
+        if (!cart) return res.status(404).json({ success: false, message: 'Cart not found' });
+
+        cart.discountedTotal = 0; 
+        cart.discount = 0;        
+        cart.couponCode = null;   
+        cart.totalItems = cart.items.length;
+
+        const { totalAmount } = await calculateCartTotals(cart);
+        cart.subtotal = totalAmount; 
+
+        await cart.save();
+
+        return res.json({ success: true, message: 'Coupon removed', cart });
+    } catch (error) {
+        console.error('Error removing coupon:', error.message);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
+
 exports.addToCart = async (req, res) => {
     try {
         const { userId, productId, variantId, quantity } = req.body;
@@ -214,7 +242,7 @@ exports.getCart = async (req, res) => {
 };
 
 exports.removeFromCart = async (req, res) => {
-    const { userId, productId, variantId } = req.params; 
+    const { userId, productId, variantId } = req.params;
 
     if (!userId || !variantId) {
         return res.status(400).json({ success: false, message: 'Invalid input' });
