@@ -15,6 +15,7 @@ const paymentRoutes = require('./routes/paymentRoutes')
 const couponRoutes = require('./routes/couponRoutes');
 const ratingRoutes = require('./routes/ratingRoutes');
 const shippingRoutes = require('./routes/shippingRoutes')
+const contactInfoRoutes = require('./routes/contactInfoRoutes')
 
 require('dotenv').config();
 const app = express();
@@ -42,6 +43,7 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/rating', ratingRoutes);
 app.use('/api/shipping', shippingRoutes);
+app.use('/api/contactinfo', contactInfoRoutes);
 
 const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
