@@ -385,3 +385,50 @@ exports.deleteProduct = async (req, res) => {
         res.status(400).json({ success: false, message: err.message });
     }
 };
+
+exports.searchProducts = async (req, res) => {
+    console.log(req.query);
+    try {
+        const { name, category, size, color, minPrice, maxPrice, isNewArrival } = req.query;
+        let query = {};
+
+        if (name) {
+            query.product_name = { $regex: name, $options: 'i' }; // Case-insensitive search
+        }
+
+        if (category) {
+            query.categories = category; // Assuming category is an ID
+        }
+
+        if (size) {
+            query.variants = { $elemMatch: { size } }; // Check for size in variants
+        }
+
+        if (color) {
+            query.variants = { $elemMatch: { color } }; // Check for color in variants
+        }
+
+        if (minPrice || maxPrice) {
+            query.variants = query.variants || {}; // Ensure variants key exists
+            query.variants.price = {};
+            if (minPrice) query.variants.price.$gte = minPrice;
+            if (maxPrice) query.variants.price.$lte = maxPrice;
+        }
+
+        if (isNewArrival !== undefined) {
+            query.isNewArrival = isNewArrival === 'true';
+        }
+
+        const products = await Product.find(query)
+            .populate('categories', 'name parentCategory')
+            .populate('variants');
+
+        if (products.length === 0) {
+            return res.status(404).json({ success: false, message: 'No products found' });
+        }
+
+        res.status(200).json({ success: true, data: products });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};

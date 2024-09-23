@@ -9,5 +9,6 @@ router.get('/products/:productId/variants', productController.getProductVariants
 router.put('/update-products/:id', upload.array('images'), productController.updateProduct);
 router.delete('/delete-products/:id', productController.deleteProduct);
 router.get('/get-product/:id', productController.getProductById)
+router.get('/search-products', productController.searchProducts);
 
 module.exports = router; 
