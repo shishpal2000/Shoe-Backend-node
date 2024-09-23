@@ -11,22 +11,20 @@ const generateOrderNumber = () => {
     return `ORD_#${randomDigits}`;
 };
 exports.createOrder = async (req, res) => {
+    console.log(req.body);
     try {
         const { userId, shippingAddress, billingAddress } = req.body;
 
-        // Find the user
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
 
-        // Fetch cart for the user
         const cart = await Cart.findOne({ userId, isActive: true }).populate('items.variant');
-        if (!cart || !cart.subtotal || !cart.discountedTotal) {
+        if (!cart || !cart.subtotal || cart.discountedTotal === undefined) {
             return res.status(400).json({ success: false, message: 'Cart not found or total missing' });
         }
 
-        // Handle addresses (update if existing, otherwise create new)
         const handleAddress = async (address, type) => {
             if (address._id) {
                 return await Address.findByIdAndUpdate(address._id, { ...address, type }, { new: true });
@@ -50,6 +48,7 @@ exports.createOrder = async (req, res) => {
             variantId: item.variant ? item.variant._id : null, // Ensure variantId is present
             quantity: item.quantity,
         }));
+
         // Create the order
         const order = new Order({
             userId,
@@ -66,8 +65,20 @@ exports.createOrder = async (req, res) => {
 
         await order.save();
 
+        // Mark the current cart as inactive
         cart.isActive = false;
         await cart.save();
+
+        // Create a new active cart for the user after placing the order
+        const newCart = new Cart({
+            userId,
+            items: [],
+            subtotal: 0,
+            discountedTotal: 0,
+            discount: 0,
+            isActive: true,
+        });
+        await newCart.save(); // Save the new cart
 
         res.status(201).json({ success: true, orderId: order._id, orderNumber });
 
