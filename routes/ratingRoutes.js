@@ -7,5 +7,6 @@ const { adminMiddleware } = require('../middleware/adminMiddleware');
 router.post('/rate', protect, RatingController.submitRating);
 router.get('/ratings/:productId', RatingController.getRatings);
 router.patch('/ratings/:ratingId/approve', adminMiddleware, RatingController.approveRating);
+router.get('/get-all-ratings', RatingController.getAllRatings);
 
 module.exports = router;

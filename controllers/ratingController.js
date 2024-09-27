@@ -59,3 +59,15 @@ exports.approveRating = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+exports.getAllRatings = async (req, res) => {
+    try {
+        const ratings = await Rating.find({}).populate('product', 'product_name').populate('user', 'firstName lastName');
+        res.status(200).json({
+            success: true,
+            ratings,
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
